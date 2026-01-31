@@ -2,89 +2,68 @@
 ; RocketLauncher Module for ShadPS4 (Updated for shadPS4QtLauncher v200)
 ; Author: DiverseBloom780 (updated)
 ; Emulator: ShadPS4 / ShadPS4QtLauncher
-; Version: 1.3
+; Version: 1.4 ; Updated for v200 main f8ebecb compatibility
 ;----------------------------------------------------------------------------
 
 MEmu := "ShadPS4"
-MEmuV := "v200" ; target QtLauncher v200
+MEmuV := "v200-f8ebecb" 
 MURL := ["https://shadps4.net"]
 MAuthor := ["DiverseBloom780"]
-MVersion := "1.3"
-MCRC := ""
-iCRC := ""
-MID := ""
+MVersion := "1.4"
 MSystem := ["Sony Playstation 4"]
 
 StartModule()
-
 BezelGUI()
 FadeInStart()
 
 ;------------------------------------
-; CONFIGURATION - adjust these paths to your setup
+; CONFIGURATION
 ;------------------------------------
 MEmuRoot := "E:\HyperSpin Attraction - AIO\Arcade\emulators\Sony Playstation 4"
-; Prefer the Qt launcher executable name for v200, but allow fallback to legacy exe
-MExeCandidates := [ MEmuRoot "\shadPS4QtLauncher.exe", MEmuRoot "\shadPS4.exe" ]
+MExePath := MEmuRoot "\shadPS4QtLauncher.exe" ; Direct path to the new Qt Launcher [cite: 4]
 MGameRoot := "E:\HyperSpin Attraction - AIO\Arcade\collections\Sony Playstation 4\roms"
 
-; Build full game path (Assumes romPath and romName are passed by RocketLauncher)
-romFolder := romPath . "\" . romName
-ebootPath := romFolder . "\eboot.bin"
+; Build paths
+romFolder := romPath . "\" . romName [cite: 5, 6]
+ebootPath := romFolder . "\eboot.bin" [cite: 6]
 
-; Validate game folder and eboot
-IfNotExist, %romFolder%
+; Validation
+IfNotExist, %MExePath%
 {
-    MsgBox, 48, Error, Game folder not found.`n`nPath: %romFolder%
+    MsgBox, 48, Error, Qt Launcher not found.`nPath: %MExePath%
     ExitModule()
     Return
 }
 IfNotExist, %ebootPath%
 {
-    MsgBox, 48, Error, Game launch failed. Eboot file not found:`n%ebootPath%
+    MsgBox, 48, Error, Game launch failed. Eboot file not found:`n%ebootPath% [cite: 7]
     ExitModule()
     Return
 }
 
-; Find a valid emulator executable from candidates
-selectedExe := ""
-for index, candidate in MExeCandidates
-{
-    if FileExist(candidate)
-    {
-        selectedExe := candidate
-        break
-    }
-}
-
-if (selectedExe = "")
-{
-    MsgBox, 48, Error, Emulator executable not found.`n`nTried:`n% MExeCandidates[1] %`n% MExeCandidates[2] %
-    ExitModule()
-    Return
-}
-
-; Determine process name for waiting/closing (extract filename)
-SplitPath, selectedExe, exeName
-
-; Launch emulator with game folder
-; Many Qt launchers accept a folder or file as argument; pass the romFolder.
-; If your launcher requires a specific flag (for example --game "path"), update LaunchArgs accordingly.
-LaunchArgs := "" . Chr(34) . romFolder . Chr(34)
+;------------------------------------
+; LAUNCH LOGIC
+;------------------------------------
+; The f8ebecb build uses -g for the game path and -f for fullscreen [cite: 11]
+LaunchArgs := "-g " . Chr(34) . romFolder . Chr(34) . " -f" [cite: 12]
 
 try
 {
-    Run, % Chr(34) . selectedExe . Chr(34) . " " . LaunchArgs, %MEmuRoot%, , pid
-    ; Wait for the process window to appear (gives up after 20 seconds)
-    WinWait, ahk_exe %exeName%, , 20
+    ; Launch the Qt Launcher with arguments [cite: 13]
+    Run, "%MExePath%" %LaunchArgs%, %MEmuRoot%, Max, pid
+    
+    ; The launcher spawns "shadps4.exe" as the actual game process. 
+    ; We wait for the core process instead of the launcher window. 
+    WinWait, ahk_exe shadps4.exe, , 20
     if ErrorLevel
     {
-        ; If no window, still wait for the process to exist
-        Process, Wait, %exeName%, 10
+        Process, Wait, shadps4.exe, 10
     }
-    ; Try to maximize the main window if present
-    WinActivate, ahk_exe %exeName%
-    WinMaximize, ahk_exe %exeName%
+    
+    ; Ensure the game window is focused and maximized for the cabinet 
+    Sleep, 2000 ; Brief sleep to allow the renderer to initialize
+    WinActivate, ahk_exe shadps4.exe
+    WinMaximize, ahk_exe shadps4.exe
 }
 catch e
 {
@@ -96,21 +75,21 @@ catch e
 ;------------------------------------
 ; WAIT AND CLEANUP
 ;------------------------------------
-FadeInExit()
+FadeInExit() [cite: 16]
 
-; Wait for emulator to close (600 seconds default)
-Process, WaitClose, %exeName%, 600
+; Monitor the core game process for closure [cite: 16]
+Process, WaitClose, shadps4.exe
 
-; Final Cleanup and Module Exit
 FadeOutExit()
 ExitModule()
 Return
 
 ;------------------------------------
-; CloseProcess Label (Used by RocketLauncher for Alt+F4, Exit Key, etc.)
+; EXIT LOGIC
 ;------------------------------------
 CloseProcess:
-    FadeOutStart()
-    ; Force Close the selected process
-    Process, Close, %exeName%
-    Return
+    FadeOutStart() [cite: 17]
+    ; Kill both the core and the launcher to ensure a clean exit 
+    Process, Close, shadps4.exe
+    Process, Close, shadPS4QtLauncher.exe
+Return
